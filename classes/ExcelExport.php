@@ -1,32 +1,63 @@
 <?php
 /**
  * Класс для экспорта данных в Excel (CSV формат)
+ * 
+ * Поддерживает экспорт:
+ * - Вознаграждений сотрудников и менеджеров
+ * - KPI сотрудников
+ * - Списков сотрудников, менеджеров и отделов
  */
 class ExcelExport {
     
+    /** @var array Словарь типов периодов */
+    private static $periodTypes = [
+        'monthly' => 'Месячная',
+        'quarterly' => 'Квартальная',
+        'yearly' => 'Годовая'
+    ];
+    
+    /** @var array Словарь должностей */
+    private static $positions = [
+        'CEO' => 'Генеральный директор',
+        'Manager' => 'Менеджер'
+    ];
+    
+    /**
+     * Инициализация зависимостей
+     */
+    private static function initDependencies(): void {
+        require_once __DIR__ . '/Database.php';
+    }
+    
+    /**
+     * Инициализация зависимостей для работы с вознаграждениями
+     */
+    private static function initRewardDependencies(): void {
+        self::initDependencies();
+        require_once __DIR__ . '/KPI.php';
+        require_once __DIR__ . '/Reward.php';
+    }
+    
     /**
      * Экспорт данных в CSV файл
+     * 
      * @param array $data Массив данных для экспорта
      * @param array $headers Заголовки колонок
      * @param string $filename Имя файла для скачивания
      */
-    public static function exportToCSV($data, $headers, $filename) {
-        // Устанавливаем заголовки для скачивания файла
+    public static function exportToCSV(array $data, array $headers, string $filename): void {
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Pragma: no-cache');
         header('Expires: 0');
         
-        // Открываем поток вывода
         $output = fopen('php://output', 'w');
         
-        // Добавляем BOM для корректного отображения UTF-8 в Excel
-        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+        // BOM для корректного отображения UTF-8 в Excel
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
         
-        // Записываем заголовки
         fputcsv($output, $headers, ';');
         
-        // Записываем данные
         foreach ($data as $row) {
             fputcsv($output, $row, ';');
         }
@@ -36,23 +67,107 @@ class ExcelExport {
     }
     
     /**
-     * Экспорт вознаграждений сотрудников
+     * Показать сообщение об отсутствии данных
+     * 
+     * @param string $message Сообщение
      */
-    public static function exportEmployeeRewards($period, $departmentId = null, $periodType = null) {
-        require_once __DIR__ . '/Database.php';
-        require_once __DIR__ . '/KPI.php';
-        require_once __DIR__ . '/Reward.php';
-        $reward = new Reward();
+    private static function showNoDataMessage(string $message): void {
+        $backUrl = $_SERVER['HTTP_REFERER'] ?? '/';
+        die($message . "<br><br><a href='" . htmlspecialchars($backUrl) . "'>← Вернуться назад</a>");
+    }
+    
+    /**
+     * Перевод типа периода на русский
+     * 
+     * @param string|null $periodType Тип периода
+     * @return string
+     */
+    private static function translatePeriodType(?string $periodType): string {
+        return self::$periodTypes[$periodType] ?? ($periodType ?? '-');
+    }
+    
+    /**
+     * Перевод должности на русский
+     * 
+     * @param string|null $position Должность
+     * @return string
+     */
+    private static function translatePosition(?string $position): string {
+        return self::$positions[$position] ?? ($position ?? '-');
+    }
+    
+    /**
+     * Форматирование даты
+     * 
+     * @param string|null $date Дата
+     * @param string $format Формат вывода
+     * @return string
+     */
+    private static function formatDate(?string $date, string $format = 'd.m.Y'): string {
+        if (empty($date)) {
+            return '-';
+        }
+        $timestamp = strtotime($date);
+        return $timestamp ? date($format, $timestamp) : '-';
+    }
+    
+    /**
+     * Форматирование периода (месяц.год)
+     * 
+     * @param string|null $period Период
+     * @return string
+     */
+    private static function formatPeriod(?string $period): string {
+        return self::formatDate($period, 'm.Y');
+    }
+    
+    /**
+     * Генерация имени файла
+     * 
+     * @param string $prefix Префикс файла
+     * @param string|null $period Период (опционально)
+     * @return string
+     */
+    private static function generateFilename(string $prefix, ?string $period = null): string {
+        $parts = [$prefix];
         
+        if ($period) {
+            $parts[] = date('Y-m', strtotime($period));
+        }
+        
+        $parts[] = date('YmdHis');
+        
+        return implode('_', $parts) . '.csv';
+    }
+    
+    /**
+     * Экспорт вознаграждений сотрудников
+     * 
+     * @param string $period Период
+     * @param int|null $departmentId ID отдела
+     * @param string|null $periodType Тип периода
+     */
+    public static function exportEmployeeRewards(string $period, ?int $departmentId = null, ?string $periodType = null): void {
+        self::initRewardDependencies();
+        
+        $reward = new Reward();
         $data = $reward->getAllRewards($period, $departmentId, $periodType);
         
-        // Если данных нет, выводим сообщение
         if (empty($data)) {
-            die("Нет данных для экспорта. Проверьте:<br>- Период: " . htmlspecialchars($period) . "<br>- Тип периода: " . htmlspecialchars($periodType) . "<br>- Отдел ID: " . htmlspecialchars($departmentId ?? 'все') . "<br><br>Возможно, вознаграждения еще не рассчитаны для этого периода.<br><a href='" . $_SERVER['HTTP_REFERER'] . "'>← Вернуться назад</a>");
+            $info = [
+                "Период: " . htmlspecialchars($period),
+                "Тип периода: " . htmlspecialchars($periodType ?? 'все'),
+                "Отдел ID: " . htmlspecialchars($departmentId ?? 'все')
+            ];
+            self::showNoDataMessage(
+                "Нет данных для экспорта.<br>" . 
+                implode('<br>', $info) . 
+                "<br><br>Возможно, вознаграждения еще не рассчитаны для этого периода."
+            );
         }
         
         $headers = [
-            'ID',
+            'ID сотрудника',
             'Имя',
             'Фамилия',
             'Email',
@@ -73,32 +188,44 @@ class ExcelExport {
                 $item['last_name'],
                 $item['email'],
                 $item['department_name'],
-                date('m.Y', strtotime($item['period'])),
+                self::formatPeriod($item['period']),
                 self::translatePeriodType($item['period_type']),
-                number_format($item['base_salary'], 2, ',', ''),
-                number_format($item['kpi_total'], 2, ',', ''),
-                number_format($item['bonus_amount'], 2, ',', ''),
-                number_format($item['total_amount'], 2, ',', '')
+                $item['base_salary'],
+                $item['kpi_total'],
+                $item['bonus_amount'],
+                $item['total_amount']
             ];
         }
         
-        $filename = 'employee_rewards_' . date('Y-m', strtotime($period)) . '_' . date('YmdHis') . '.csv';
-        self::exportToCSV($rows, $headers, $filename);
+        self::exportToCSV($rows, $headers, self::generateFilename('employee_rewards', $period));
     }
     
     /**
      * Экспорт вознаграждений менеджеров
+     * 
+     * @param string $period Период
+     * @param string|null $periodType Тип периода
      */
-    public static function exportManagerRewards($period, $periodType = null) {
-        require_once __DIR__ . '/Database.php';
-        require_once __DIR__ . '/KPI.php';
-        require_once __DIR__ . '/Reward.php';
-        $reward = new Reward();
+    public static function exportManagerRewards(string $period, ?string $periodType = null): void {
+        self::initRewardDependencies();
         
+        $reward = new Reward();
         $data = $reward->getAllManagerRewards($period, $periodType);
         
+        if (empty($data)) {
+            $info = [
+                "Период: " . htmlspecialchars($period),
+                "Тип периода: " . htmlspecialchars($periodType ?? 'все')
+            ];
+            self::showNoDataMessage(
+                "Нет данных для экспорта.<br>" . 
+                implode('<br>', $info) . 
+                "<br><br>Возможно, вознаграждения менеджеров еще не рассчитаны для этого периода."
+            );
+        }
+        
         $headers = [
-            'ID',
+            'ID менеджера',
             'Имя',
             'Фамилия',
             'Email',
@@ -106,9 +233,8 @@ class ExcelExport {
             'Период',
             'Тип периода',
             'Базовая зарплата',
-            'Сотрудников',
-            'Премии сотрудников',
-            'Процент (%)',
+            'Количество сотрудников',
+            'Средний KPI отдела (%)',
             'Премия',
             'Итого'
         ];
@@ -121,33 +247,46 @@ class ExcelExport {
                 $item['last_name'],
                 $item['email'],
                 $item['department_name'],
-                date('m.Y', strtotime($item['period'])),
+                self::formatPeriod($item['period']),
                 self::translatePeriodType($item['period_type']),
-                number_format($item['base_salary'], 2, ',', ''),
+                $item['base_salary'],
                 $item['employees_count'],
-                number_format($item['total_employee_bonuses'], 2, ',', ''),
-                number_format($item['bonus_percentage'], 2, ',', ''),
-                number_format($item['bonus_amount'], 2, ',', ''),
-                number_format($item['total_amount'], 2, ',', '')
+                $item['avg_department_kpi'],
+                $item['bonus_amount'],
+                $item['total_amount']
             ];
         }
         
-        $filename = 'manager_rewards_' . date('Y-m', strtotime($period)) . '_' . date('YmdHis') . '.csv';
-        self::exportToCSV($rows, $headers, $filename);
+        self::exportToCSV($rows, $headers, self::generateFilename('manager_rewards', $period));
     }
     
     /**
      * Экспорт KPI сотрудников
+     * 
+     * @param string $period Период
+     * @param int|null $departmentId ID отдела
      */
-    public static function exportEmployeeKPI($period, $departmentId = null) {
-        require_once __DIR__ . '/Database.php';
+    public static function exportEmployeeKPI(string $period, ?int $departmentId = null): void {
+        self::initDependencies();
         require_once __DIR__ . '/KPI.php';
-        $kpi = new KPI();
         
+        $kpi = new KPI();
         $data = $kpi->getAllEmployeesKPI($period, $departmentId);
         
+        if (empty($data)) {
+            $info = [
+                "Период: " . htmlspecialchars($period),
+                "Отдел ID: " . htmlspecialchars($departmentId ?? 'все')
+            ];
+            self::showNoDataMessage(
+                "Нет данных для экспорта.<br>" . 
+                implode('<br>', $info) . 
+                "<br><br>Возможно, KPI еще не рассчитаны для этого периода."
+            );
+        }
+        
         $headers = [
-            'ID',
+            'ID сотрудника',
             'Имя',
             'Фамилия',
             'Email',
@@ -165,23 +304,25 @@ class ExcelExport {
                 $item['email'],
                 $item['department_name'],
                 $period,
-                number_format($item['total_kpi'], 2, ',', '')
+                $item['total_kpi']
             ];
         }
         
-        $filename = 'employee_kpi_' . $period . '_' . date('YmdHis') . '.csv';
-        self::exportToCSV($rows, $headers, $filename);
+        self::exportToCSV($rows, $headers, self::generateFilename('employee_kpi', $period));
     }
     
     /**
      * Экспорт списка сотрудников
+     * 
+     * @param int|null $departmentId ID отдела
      */
-    public static function exportEmployees($departmentId = null) {
-        require_once __DIR__ . '/Database.php';
+    public static function exportEmployees(?int $departmentId = null): void {
+        self::initDependencies();
         $db = Database::getInstance();
         
-        $sql = "SELECT e.*, d.name as department_name, 
-                CONCAT(m.first_name, ' ', m.last_name) as manager_name
+        $sql = "SELECT e.*, 
+                       d.name as department_name, 
+                       CONCAT(m.first_name, ' ', m.last_name) as manager_name
                 FROM employees e
                 JOIN departments d ON e.department_id = d.id
                 LEFT JOIN managers m ON e.manager_id = m.id";
@@ -195,6 +336,10 @@ class ExcelExport {
         $sql .= " ORDER BY e.last_name, e.first_name";
         
         $data = $db->fetchAll($sql, $params);
+        
+        if (empty($data)) {
+            self::showNoDataMessage("Нет сотрудников для экспорта.");
+        }
         
         $headers = [
             'ID',
@@ -215,23 +360,22 @@ class ExcelExport {
                 $item['first_name'],
                 $item['last_name'],
                 $item['email'],
-                $item['phone_number'],
+                $item['phone_number'] ?? '-',
                 $item['department_name'],
                 $item['manager_name'] ?? '-',
-                date('d.m.Y', strtotime($item['hire_date'])),
-                number_format($item['base_salary'], 2, ',', '')
+                self::formatDate($item['hire_date']),
+                $item['base_salary']
             ];
         }
         
-        $filename = 'employees_' . date('YmdHis') . '.csv';
-        self::exportToCSV($rows, $headers, $filename);
+        self::exportToCSV($rows, $headers, self::generateFilename('employees'));
     }
     
     /**
      * Экспорт списка менеджеров
      */
-    public static function exportManagers() {
-        require_once __DIR__ . '/Database.php';
+    public static function exportManagers(): void {
+        self::initDependencies();
         $db = Database::getInstance();
         
         $sql = "SELECT m.*, d.name as department_name
@@ -240,6 +384,10 @@ class ExcelExport {
                 ORDER BY m.last_name, m.first_name";
         
         $data = $db->fetchAll($sql);
+        
+        if (empty($data)) {
+            self::showNoDataMessage("Нет менеджеров для экспорта.");
+        }
         
         $headers = [
             'ID',
@@ -260,36 +408,39 @@ class ExcelExport {
                 $item['first_name'],
                 $item['last_name'],
                 $item['email'],
-                $item['phone_number'],
+                $item['phone_number'] ?? '-',
                 $item['department_name'],
-                $item['position'] === 'CEO' ? 'Генеральный директор' : 'Менеджер',
-                date('d.m.Y', strtotime($item['hire_date'])),
-                number_format($item['base_salary'], 2, ',', '')
+                self::translatePosition($item['position']),
+                self::formatDate($item['hire_date']),
+                $item['base_salary']
             ];
         }
         
-        $filename = 'managers_' . date('YmdHis') . '.csv';
-        self::exportToCSV($rows, $headers, $filename);
+        self::exportToCSV($rows, $headers, self::generateFilename('managers'));
     }
     
     /**
      * Экспорт отделов
      */
-    public static function exportDepartments() {
-        require_once __DIR__ . '/Database.php';
+    public static function exportDepartments(): void {
+        self::initDependencies();
         $db = Database::getInstance();
         
-        $data = $db->fetchAll("
-            SELECT d.*,
-                   (SELECT COUNT(*) FROM managers WHERE department_id = d.id) as manager_count,
-                   (SELECT COUNT(*) FROM employees WHERE department_id = d.id) as employee_count
-            FROM departments d
-            ORDER BY d.name
-        ");
+        $sql = "SELECT d.*,
+                       (SELECT COUNT(*) FROM managers WHERE department_id = d.id) as manager_count,
+                       (SELECT COUNT(*) FROM employees WHERE department_id = d.id) as employee_count
+                FROM departments d
+                ORDER BY d.name";
+        
+        $data = $db->fetchAll($sql);
+        
+        if (empty($data)) {
+            self::showNoDataMessage("Нет отделов для экспорта.");
+        }
         
         $headers = [
             'ID',
-            'Название',
+            'Название отдела',
             'Количество сотрудников',
             'Количество менеджеров'
         ];
@@ -304,19 +455,6 @@ class ExcelExport {
             ];
         }
         
-        $filename = 'departments_' . date('YmdHis') . '.csv';
-        self::exportToCSV($rows, $headers, $filename);
-    }
-    
-    /**
-     * Перевод типа периода на русский
-     */
-    private static function translatePeriodType($periodType) {
-        $types = [
-            'monthly' => 'Месячная',
-            'quarterly' => 'Квартальная',
-            'yearly' => 'Годовая'
-        ];
-        return $types[$periodType] ?? $periodType;
+        self::exportToCSV($rows, $headers, self::generateFilename('departments'));
     }
 }

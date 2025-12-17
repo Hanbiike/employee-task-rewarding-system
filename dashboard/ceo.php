@@ -106,7 +106,7 @@ $topEmployees = $kpi->getTopEmployees($currentPeriod, 5);
                     </div>
                     <div class="stat-card danger">
                         <div class="icon">💰</div>
-                        <div class="value"><?php echo number_format($rewardStats['total_rewards'] ?? 0, 0, ',', ' '); ?> ₽</div>
+                        <div class="value"><?php echo number_format($rewardStats['total_rewards'] ?? 0, 0, ',', ' '); ?> Сом</div>
                         <div class="label">Вознаграждения</div>
                     </div>
                 </div>

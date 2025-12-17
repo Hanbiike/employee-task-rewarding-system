@@ -333,10 +333,18 @@ class KPI {
     }
 
     /**
-     * Получить средний KPI по отделу
+     * Получить средний KPI по отделу за период
+     * @param int $departmentId ID отдела
+     * @param string $period Период в формате YYYY-MM
+     * @param string $periodType Тип периода: monthly, quarterly, yearly
+     * @return float Средний KPI в процентах
      */
-    public function getDepartmentAverageKPI($departmentId, $period) {
-        $employees = $this->getAllEmployeesKPI($period, $departmentId);
+    public function getDepartmentAverageKPI($departmentId, $period, $periodType = 'monthly') {
+        // Получаем список сотрудников отдела
+        $employees = $this->db->fetchAll(
+            "SELECT id FROM employees WHERE department_id = ?",
+            [$departmentId]
+        );
         
         if (empty($employees)) {
             return 0;
@@ -345,14 +353,68 @@ class KPI {
         $total = 0;
         $count = 0;
 
+        // Определяем периоды для расчёта в зависимости от типа
+        $periods = $this->getPeriodsForType($period, $periodType);
+
         foreach ($employees as $employee) {
-            if ($employee['total_kpi'] > 0) {
-                $total += $employee['total_kpi'];
+            $employeeKpiSum = 0;
+            $employeePeriodCount = 0;
+            
+            foreach ($periods as $p) {
+                $kpi = $this->calculateTotalKPI($employee['id'], $p, 'monthly');
+                if ($kpi > 0) {
+                    $employeeKpiSum += $kpi;
+                    $employeePeriodCount++;
+                }
+            }
+            
+            if ($employeePeriodCount > 0) {
+                $total += ($employeeKpiSum / $employeePeriodCount);
                 $count++;
             }
         }
 
         return $count > 0 ? round($total / $count, 2) : 0;
+    }
+
+    /**
+     * Получить список периодов для расчёта в зависимости от типа
+     * @param string $period Базовый период в формате YYYY-MM
+     * @param string $periodType Тип: monthly, quarterly, yearly
+     * @return array Список периодов в формате YYYY-MM
+     */
+    private function getPeriodsForType($period, $periodType) {
+        $periods = [];
+        $date = new DateTime($period . '-01');
+        
+        switch ($periodType) {
+            case 'yearly':
+                // Все 12 месяцев года
+                $year = $date->format('Y');
+                for ($m = 1; $m <= 12; $m++) {
+                    $periods[] = sprintf('%s-%02d', $year, $m);
+                }
+                break;
+                
+            case 'quarterly':
+                // 3 месяца квартала
+                $month = (int)$date->format('m');
+                $quarter = ceil($month / 3);
+                $startMonth = ($quarter - 1) * 3 + 1;
+                $year = $date->format('Y');
+                for ($m = $startMonth; $m < $startMonth + 3; $m++) {
+                    $periods[] = sprintf('%s-%02d', $year, $m);
+                }
+                break;
+                
+            case 'monthly':
+            default:
+                // Только текущий месяц
+                $periods[] = $date->format('Y-m');
+                break;
+        }
+        
+        return $periods;
     }
 
     /**

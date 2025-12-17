@@ -330,7 +330,7 @@ class Reward {
 
     /**
      * Рассчитать и сохранить вознаграждение менеджера
-     * Формула: 100 / количество_сотрудников * общая_сумма_премий
+     * Новая формула: Премия = Базовая зарплата × (Средний KPI отдела / 100)
      */
     public function calculateAndSaveManagerReward($managerId, $period, $periodType = null) {
         // Получаем базовую зарплату менеджера
@@ -363,30 +363,11 @@ class Reward {
             [$departmentId]
         )['count'];
 
-        if ($employeesCount == 0) {
-            throw new Exception("В отделе нет сотрудников");
-        }
+        // Получаем средний KPI отдела за период
+        $avgDepartmentKpi = $this->kpi->getDepartmentAverageKPI($departmentId, $period, $periodType);
 
-        // Получаем общую сумму премий сотрудников отдела за период
-        $totalBonuses = $this->db->fetchOne(
-            "SELECT COALESCE(SUM(r.bonus_amount), 0) as total
-             FROM rewards r
-             JOIN employees e ON r.employee_id = e.id
-             WHERE e.department_id = ? 
-             AND r.period = ? 
-             AND r.period_type = ?",
-            [$departmentId, $period, $periodType]
-        )['total'];
-
-        // Получаем настройки KPI для процента премии менеджера
-        $kpiSettings = $this->kpi->getKPISettings();
-        $managerBonusCoefficient = $kpiSettings['manager_bonus_percentage'] / 100;
-
-        // Рассчитываем процент: (100 / количество сотрудников) * коэффициент
-        $bonusPercentage = (100 / $employeesCount) * $managerBonusCoefficient;
-
-        // Рассчитываем премию менеджера: (процент / 100) * общая сумма премий
-        $bonusAmount = ($bonusPercentage / 100) * $totalBonuses;
+        // Рассчитываем премию менеджера: Базовая зарплата × (Средний KPI / 100)
+        $bonusAmount = $baseSalary * ($avgDepartmentKpi / 100);
 
         // Общая сумма = базовая зарплата + премия
         $totalAmount = $baseSalary + $bonusAmount;
@@ -404,8 +385,7 @@ class Reward {
                     base_salary = ?, 
                     department_id = ?,
                     employees_count = ?, 
-                    total_employee_bonuses = ?, 
-                    bonus_percentage = ?, 
+                    avg_department_kpi = ?, 
                     bonus_amount = ?, 
                     total_amount = ? 
                     WHERE id = ?";
@@ -413,8 +393,7 @@ class Reward {
                 $baseSalary, 
                 $departmentId,
                 $employeesCount, 
-                $totalBonuses, 
-                $bonusPercentage, 
+                $avgDepartmentKpi, 
                 $bonusAmount, 
                 $totalAmount, 
                 $existing['id']
@@ -424,9 +403,9 @@ class Reward {
             // Создаём новую
             $sql = "INSERT INTO manager_rewards 
                     (manager_id, period, period_type, base_salary, department_id, 
-                     employees_count, total_employee_bonuses, bonus_percentage, 
+                     employees_count, avg_department_kpi, 
                      bonus_amount, total_amount) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             return $this->db->insert($sql, [
                 $managerId, 
                 $period, 
@@ -434,8 +413,7 @@ class Reward {
                 $baseSalary, 
                 $departmentId,
                 $employeesCount, 
-                $totalBonuses, 
-                $bonusPercentage, 
+                $avgDepartmentKpi, 
                 $bonusAmount, 
                 $totalAmount
             ]);
@@ -549,7 +527,7 @@ class Reward {
                     MIN(total_amount) as min_reward,
                     SUM(bonus_amount) as total_bonuses,
                     AVG(bonus_amount) as avg_bonus,
-                    AVG(bonus_percentage) as avg_percentage
+                    AVG(avg_department_kpi) as avg_kpi
                 FROM manager_rewards
                 WHERE period = ?";
         

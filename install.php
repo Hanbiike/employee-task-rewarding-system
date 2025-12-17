@@ -208,7 +208,7 @@ try {
                 'status' => 'In Progress',
                 'importance' => 'Medium',
                 'deadline' => date('Y-m-d', strtotime('+5 months')),
-                'manager' => 'manager1@aea-system.com'
+                'manager' => 'manager1@aea_system.com'
             ],
             [
                 'name' => 'Автоматизация отчётности',
@@ -216,7 +216,7 @@ try {
                 'departments' => ['IT отдел'],
                 'status' => 'Completed',
                 'importance' => 'Medium',
-                'deadline' => date('Y-m-d', strtotime('-1 month')),
+                'deadline' => date('Y-m-d', strtotime('+1 month')), // Дедлайн в будущем, проект уже завершён
                 'manager' => 'manager1@aea-system.com'
             ],
             [
@@ -235,7 +235,7 @@ try {
                 'status' => 'In Progress',
                 'importance' => 'Critical',
                 'deadline' => date('Y-m-d', strtotime('+3 months')),
-                'manager' => 'manager2@aea-system.com'
+                'manager' => 'manager2@aea_system.com'
             ],
             [
                 'name' => 'Обучение менеджеров продаж',
@@ -243,8 +243,8 @@ try {
                 'departments' => ['Отдел продаж'],
                 'status' => 'Completed',
                 'importance' => 'Medium',
-                'deadline' => date('Y-m-d', strtotime('-2 weeks')),
-                'manager' => 'manager2@aea-system.com'
+                'deadline' => date('Y-m-d', strtotime('+2 weeks')), // Дедлайн в будущем, проект уже завершён
+                'manager' => 'manager2@aea_system.com'
             ],
             [
                 'name' => 'Запуск новой линейки продуктов',
@@ -253,7 +253,7 @@ try {
                 'status' => 'Not Started',
                 'importance' => 'High',
                 'deadline' => date('Y-m-d', strtotime('+6 months')),
-                'manager' => 'manager2@aea-system.com'
+                'manager' => 'manager2@aea_system.com'
             ],
             [
                 'name' => 'Оптимизация процесса продаж',
@@ -262,7 +262,7 @@ try {
                 'status' => 'In Progress',
                 'importance' => 'Medium',
                 'deadline' => date('Y-m-d', strtotime('+4 months')),
-                'manager' => 'manager2@aea-system.com'
+                'manager' => 'manager2@aea_system.com'
             ],
         ];
         
@@ -367,10 +367,13 @@ try {
             $status = $statuses[array_rand($statuses)];
             $importance = $importances[array_rand($importances)];
             
-            // Случайные даты
-            $daysOffset = rand(-30, 60);
+            // Дедлайн всегда в будущем (от 1 до 90 дней)
+            $daysOffset = rand(1, 90);
             $deadline = date('Y-m-d', strtotime("+{$daysOffset} days"));
-            $endDate = ($status === 'Completed') ? date('Y-m-d', strtotime("-" . rand(1, 10) . " days")) : null;
+            
+            // Для завершённых задач end_date в прошлом, но после created_at (сегодня)
+            // Устанавливаем end_date как сегодня или вчера для завершённых задач
+            $endDate = ($status === 'Completed') ? date('Y-m-d') : null;
             
             $existing = $db->fetchOne("SELECT id FROM tasks WHERE name = ?", [$taskName]);
             
@@ -536,7 +539,7 @@ try {
     $managerRewardCount = 0;
     
     // Получаем всех менеджеров (кроме CEO)
-    $managers = $db->fetchAll("SELECT id, department_id FROM managers WHERE position = 'Manager'");
+    $managers = $db->fetchAll("SELECT id, department_id, base_salary FROM managers WHERE position = 'Manager'");
     
     foreach ($managers as $manager) {
         // Создаём вознаграждения за последние 3 месяца
@@ -563,61 +566,66 @@ try {
                 [$manager['department_id']]
             )['count'];
             
-            if ($employeesCount > 0) {
-                // Получаем общую сумму премий сотрудников отдела
-                $totalBonuses = $db->fetchOne(
-                    "SELECT COALESCE(SUM(bonus_amount), 0) as total
-                     FROM rewards r
-                     JOIN employees e ON r.employee_id = e.id
-                     WHERE e.department_id = ? AND r.period = ? AND r.period_type = ?",
-                    [$manager['department_id'], $period, $periodType]
-                )['total'];
-                
-                // Получаем базовую зарплату менеджера
-                $managerData = $db->fetchOne(
-                    "SELECT base_salary FROM managers WHERE id = ?",
-                    [$manager['id']]
-                );
-                $baseSalary = $managerData['base_salary'];
-                
-                // Рассчитываем процент: 100 / количество сотрудников
-                $bonusPercentage = 100 / $employeesCount;
-                
-                // Рассчитываем премию менеджера
-                $bonusAmount = ($bonusPercentage * $totalBonuses) / 100;
-                
-                // Общая сумма
-                $totalAmount = $baseSalary + $bonusAmount;
-                
-                // Проверяем, есть ли уже запись
-                $existing = $db->fetchOne(
-                    "SELECT id FROM manager_rewards 
-                     WHERE manager_id = ? AND period = ? AND period_type = ?",
-                    [$manager['id'], $period, $periodType]
+            $baseSalary = $manager['base_salary'];
+            
+            // Рассчитываем средний KPI отдела за период
+            // Получаем KPI всех сотрудников отдела за период
+            $employees = $db->fetchAll(
+                "SELECT id FROM employees WHERE department_id = ?",
+                [$manager['department_id']]
+            );
+            
+            $totalKpi = 0;
+            $kpiCount = 0;
+            
+            foreach ($employees as $emp) {
+                // Получаем KPI сотрудника за период (из rewards)
+                $empReward = $db->fetchOne(
+                    "SELECT kpi_total FROM rewards WHERE employee_id = ? AND period = ? AND period_type = ?",
+                    [$emp['id'], $period, $periodType]
                 );
                 
-                if (!$existing) {
-                    $db->insert(
-                        "INSERT INTO manager_rewards 
-                         (manager_id, period, period_type, base_salary, department_id, 
-                          employees_count, total_employee_bonuses, bonus_percentage, 
-                          bonus_amount, total_amount) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        [
-                            $manager['id'], 
-                            $period, 
-                            $periodType, 
-                            $baseSalary,
-                            $manager['department_id'], 
-                            $employeesCount, 
-                            $totalBonuses, 
-                            $bonusPercentage, 
-                            $bonusAmount, 
-                            $totalAmount
-                        ]
-                    );
-                    $managerRewardCount++;
+                if ($empReward && $empReward['kpi_total'] > 0) {
+                    $totalKpi += $empReward['kpi_total'];
+                    $kpiCount++;
                 }
+            }
+            
+            $avgDepartmentKpi = $kpiCount > 0 ? round($totalKpi / $kpiCount, 2) : 0;
+            
+            // Рассчитываем премию менеджера: base_salary * (avg_department_kpi / 100)
+            $bonusAmount = $baseSalary * ($avgDepartmentKpi / 100);
+            
+            // Общая сумма
+            $totalAmount = $baseSalary + $bonusAmount;
+            
+            // Проверяем, есть ли уже запись
+            $existing = $db->fetchOne(
+                "SELECT id FROM manager_rewards 
+                 WHERE manager_id = ? AND period = ? AND period_type = ?",
+                [$manager['id'], $period, $periodType]
+            );
+            
+            if (!$existing) {
+                $db->insert(
+                    "INSERT INTO manager_rewards 
+                     (manager_id, period, period_type, base_salary, department_id, 
+                      employees_count, avg_department_kpi, 
+                      bonus_amount, total_amount) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        $manager['id'], 
+                        $period, 
+                        $periodType, 
+                        $baseSalary,
+                        $manager['department_id'], 
+                        $employeesCount, 
+                        $avgDepartmentKpi, 
+                        $bonusAmount, 
+                        $totalAmount
+                    ]
+                );
+                $managerRewardCount++;
             }
         }
     }

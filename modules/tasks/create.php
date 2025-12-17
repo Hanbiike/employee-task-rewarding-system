@@ -71,6 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_task'])) {
             $error = 'Выберите проект';
         } elseif (empty($data['employee_ids'])) {
             $error = 'Назначьте хотя бы одного исполнителя';
+        } elseif (!empty($data['deadline']) && strtotime($data['deadline']) < strtotime(date('Y-m-d'))) {
+            $error = 'Дедлайн должен быть не раньше сегодняшней даты';
         } else {
             try {
                 $taskId = $task->create($data);
@@ -256,5 +258,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_task'])) {
             </div>
         </div>
     </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const deadlineInput = document.getElementById('deadline');
+        const form = document.querySelector('form');
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Устанавливаем минимальную дату дедлайна
+        deadlineInput.setAttribute('min', today);
+        
+        // Валидация при изменении
+        deadlineInput.addEventListener('change', function() {
+            if (this.value && this.value < today) {
+                alert('Дедлайн должен быть не раньше сегодняшней даты');
+                this.value = today;
+            }
+        });
+        
+        // Валидация при отправке формы
+        form.addEventListener('submit', function(e) {
+            if (deadlineInput.value && deadlineInput.value < today) {
+                e.preventDefault();
+                alert('Дедлайн должен быть не раньше сегодняшней даты');
+                deadlineInput.focus();
+            }
+        });
+    });
+    </script>
 </body>
 </html>

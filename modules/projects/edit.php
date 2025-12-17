@@ -64,6 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_project'])) {
             $error = 'Название проекта обязательно';
         } elseif (empty($data['department_ids'])) {
             $error = 'Выберите хотя бы один отдел';
+        } elseif (!empty($data['deadline']) && strtotime($data['deadline']) < strtotime(date('Y-m-d', strtotime($projectData['created_at'])))) {
+            $error = 'Дедлайн должен быть не раньше даты создания проекта';
         } else {
             try {
                 $project->update($projectId, $data);
@@ -279,5 +281,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_project'])) {
             </div>
         </div>
     </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const deadlineInput = document.getElementById('deadline');
+        const statusSelect = document.getElementById('status');
+        const endDateInput = document.getElementById('end_date');
+        const form = document.querySelector('form:not([onsubmit])'); // Основная форма, не форма удаления
+        const createdAt = '<?php echo date('Y-m-d', strtotime($projectData['created_at'])); ?>';
+        
+        // Устанавливаем минимальную дату дедлайна равной дате создания проекта
+        deadlineInput.setAttribute('min', createdAt);
+        
+        // Валидация при изменении
+        deadlineInput.addEventListener('change', function() {
+            if (this.value && this.value < createdAt) {
+                alert('Дедлайн должен быть не раньше даты создания проекта (' + createdAt + ')');
+                this.value = '';
+            }
+        });
+        
+        // Валидация при отправке формы
+        form.addEventListener('submit', function(e) {
+            if (deadlineInput.value && deadlineInput.value < createdAt) {
+                e.preventDefault();
+                alert('Дедлайн должен быть не раньше даты создания проекта (' + createdAt + ')');
+                deadlineInput.focus();
+            }
+        });
+        
+        // Автоматически устанавливаем дату завершения при выборе статуса "Завершен"
+        statusSelect.addEventListener('change', function() {
+            if (this.value === 'Completed' && !endDateInput.value) {
+                endDateInput.value = new Date().toISOString().split('T')[0];
+            }
+        });
+    });
+    </script>
 </body>
 </html>

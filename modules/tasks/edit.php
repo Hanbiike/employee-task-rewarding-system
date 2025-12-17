@@ -88,6 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_task'])) {
             $error = 'Название задачи обязательно';
         } elseif (empty($data['employee_ids'])) {
             $error = 'Назначьте хотя бы одного исполнителя';
+        } elseif (!empty($data['deadline']) && strtotime($data['deadline']) < strtotime(date('Y-m-d', strtotime($taskData['created_at'])))) {
+            $error = 'Дедлайн должен быть не раньше даты создания задачи';
         } else {
             try {
                 $task->update($taskId, $data);
@@ -314,6 +316,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_task'])) {
             if (this.value === 'Completed' && !endDateInput.value) {
                 endDateInput.value = new Date().toISOString().split('T')[0];
             }
+        });
+        
+        // Валидация дедлайна
+        document.addEventListener('DOMContentLoaded', function() {
+            const deadlineInput = document.getElementById('deadline');
+            const form = document.querySelector('form:not([onsubmit])'); // Основная форма, не форма удаления
+            const createdAt = '<?php echo date('Y-m-d', strtotime($taskData['created_at'])); ?>';
+            
+            // Устанавливаем минимальную дату дедлайна равной дате создания задачи
+            deadlineInput.setAttribute('min', createdAt);
+            
+            // Валидация при изменении
+            deadlineInput.addEventListener('change', function() {
+                if (this.value && this.value < createdAt) {
+                    alert('Дедлайн должен быть не раньше даты создания задачи (' + createdAt + ')');
+                    this.value = '';
+                }
+            });
+            
+            // Валидация при отправке формы
+            form.addEventListener('submit', function(e) {
+                if (deadlineInput.value && deadlineInput.value < createdAt) {
+                    e.preventDefault();
+                    alert('Дедлайн должен быть не раньше даты создания задачи (' + createdAt + ')');
+                    deadlineInput.focus();
+                }
+            });
         });
     </script>
 </body>

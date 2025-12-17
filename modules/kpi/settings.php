@@ -28,10 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_kpi_settings']
     } else {
         $tasksWeight = intval($_POST['tasks_weight']);
         $managerWeight = intval($_POST['manager_weight']);
-        $managerBonusPercentage = isset($_POST['manager_bonus_percentage']) ? floatval($_POST['manager_bonus_percentage']) : null;
         
         try {
-            $kpi->updateKPISettings($tasksWeight, $managerWeight, User::getCurrentUserId(), $managerBonusPercentage);
+            $kpi->updateKPISettings($tasksWeight, $managerWeight, User::getCurrentUserId());
             $success = 'Настройки KPI успешно обновлены!';
             $currentSettings = $kpi->getKPISettings();
         } catch (Exception $e) {
@@ -215,18 +214,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_importance_wei
                                 </div>
 
                                 <div class="form-group">
-                                    <label>Коэффициент премии менеджера (%)</label>
-                                    <input type="number" name="manager_bonus_percentage" 
-                                           value="<?php echo $currentSettings['manager_bonus_percentage']; ?>" 
-                                           min="0" max="200" step="0.01" class="form-input"
-                                           style="width: 150px;">
-                                    <p class="text-muted" style="margin-top: 5px; font-size: 0.9em;">
-                                        Премия = (<?php echo $currentSettings['manager_bonus_percentage']; ?>% / кол-во сотрудников) × Σ премий сотрудников<br>
-                                        <small>100% = стандартная формула (100 / кол-во сотрудников)</small>
-                                    </p>
-                                </div>
-
-                                <div class="form-group">
                                     <button type="submit" class="btn btn-primary">Сохранить настройки</button>
                                 </div>
                             </form>
@@ -236,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_importance_wei
                                 <ul style="margin: 10px 0; padding-left: 20px;">
                                     <li><strong>Выполнение задач</strong>: рассчитывается как (сумма весов выполненных задач) / (сумма весов всех задач)</li>
                                     <li><strong>Оценка менеджера</strong>: глобальные метрики (пунктуальность, качество работы и др.), устанавливаемые менеджером</li>
+                                    <li><strong>Премия менеджера</strong>: Базовая зарплата × (Средний KPI отдела / 100)</li>
                                 </ul>
                             </div>
                         </div>

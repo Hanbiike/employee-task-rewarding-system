@@ -431,8 +431,7 @@ $periodTypes = [
                                         <th>Менеджер</th>
                                         <th>Отдел</th>
                                         <th>Сотрудников</th>
-                                        <th>Премии сотрудников</th>
-                                        <th>Процент</th>
+                                        <th>Средний KPI</th>
                                         <th>Базовая зарплата</th>
                                         <th>Премия</th>
                                         <th>Итого</th>
@@ -448,10 +447,9 @@ $periodTypes = [
                                         <td><?php echo htmlspecialchars($mr['first_name'] . ' ' . $mr['last_name']); ?></td>
                                         <td><?php echo htmlspecialchars($mr['department_name']); ?></td>
                                         <td><?php echo $mr['employees_count']; ?></td>
-                                        <td><?php echo number_format($mr['total_employee_bonuses'], 0, ',', ' '); ?> ₽</td>
                                         <td>
                                             <span class="badge badge-info">
-                                                <?php echo number_format($mr['bonus_percentage'], 2); ?>%
+                                                <?php echo number_format($mr['avg_department_kpi'], 2); ?>%
                                             </span>
                                         </td>
                                         <td><?php echo number_format($mr['base_salary'], 0, ',', ' '); ?> ₽</td>
@@ -470,7 +468,7 @@ $periodTypes = [
                                 </tbody>
                                 <tfoot>
                                     <tr style="background: var(--light-color); font-weight: bold;">
-                                        <td colspan="6">Всего:</td>
+                                        <td colspan="5">Всего:</td>
                                         <td>
                                             <?php 
                                             $totalBase = array_sum(array_column($managerRewards, 'base_salary'));

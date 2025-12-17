@@ -91,8 +91,8 @@ $periodTypes = [
                         <h3 style="color: white; margin-bottom: 10px;">ℹ️ Как рассчитывается вознаграждение менеджера</h3>
                         <p style="font-size: 16px; line-height: 1.6; margin: 0;">
                             Ваше вознаграждение = <strong>Базовая зарплата</strong> + <strong>Премия</strong><br>
-                            <strong>Премия</strong> = (100 / Количество сотрудников в отделе) × Общая сумма премий сотрудников<br>
-                            <em>Например: если в отделе 5 человек, вы получаете 20% от общей суммы премий сотрудников</em>
+                            <strong>Премия</strong> = Базовая зарплата × (Средний KPI отдела / 100)<br>
+                            <em>Например: если ваша зарплата 100 000 ₽ и средний KPI отдела 85%, ваша премия = 85 000 ₽</em>
                         </p>
                     </div>
                 </div>
@@ -130,10 +130,10 @@ $periodTypes = [
                                 </div>
                                 <div style="background: var(--light-color); padding: 20px; border-radius: 8px;">
                                     <div style="font-size: 14px; color: var(--text-light); margin-bottom: 8px;">
-                                        Процент от премий
+                                        Средний KPI отдела
                                     </div>
                                     <div style="font-size: 24px; font-weight: bold; color: var(--warning-color);">
-                                        <?php echo number_format($currentReward['bonus_percentage'], 2); ?>%
+                                        <?php echo number_format($currentReward['avg_department_kpi'], 2); ?>%
                                     </div>
                                 </div>
                                 <div style="background: var(--light-color); padding: 20px; border-radius: 8px;">
@@ -147,13 +147,12 @@ $periodTypes = [
                             </div>
                             <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
                                 <p style="margin: 0; font-size: 16px; color: var(--text-light);">
-                                    <strong>Общая сумма премий сотрудников:</strong> 
-                                    <?php echo number_format($currentReward['total_employee_bonuses'], 2, ',', ' '); ?> ₽
+                                    <strong>Формула расчёта:</strong> Базовая зарплата × (Средний KPI / 100)
                                 </p>
                                 <p style="margin: 10px 0 0 0; font-size: 14px; color: var(--text-light);">
-                                    <em>Расчет: <?php echo number_format($currentReward['total_employee_bonuses'], 2, ',', ' '); ?> × 
-                                    <?php echo number_format($currentReward['bonus_percentage'], 2); ?>% = 
-                                    <?php echo number_format($currentReward['bonus_amount'], 2, ',', ' '); ?> ₽</em>
+                                    <em>Расчёт: <?php echo number_format($currentReward['base_salary'], 0, ',', ' '); ?> ₽ × 
+                                    <?php echo number_format($currentReward['avg_department_kpi'], 2); ?>% = 
+                                    <?php echo number_format($currentReward['bonus_amount'], 0, ',', ' '); ?> ₽</em>
                                 </p>
                             </div>
                         </div>
@@ -179,8 +178,7 @@ $periodTypes = [
                                         <th>Период</th>
                                         <th>Отдел</th>
                                         <th>Сотрудников</th>
-                                        <th>Премии сотрудников</th>
-                                        <th>Процент</th>
+                                        <th>Средний KPI</th>
                                         <th>Базовая зарплата</th>
                                         <th>Премия</th>
                                         <th>Итого</th>
@@ -192,8 +190,7 @@ $periodTypes = [
                                         <td><?php echo date('m.Y', strtotime($hist['period'])); ?></td>
                                         <td><?php echo htmlspecialchars($hist['department_name']); ?></td>
                                         <td><?php echo $hist['employees_count']; ?></td>
-                                        <td><?php echo number_format($hist['total_employee_bonuses'], 0, ',', ' '); ?> ₽</td>
-                                        <td><?php echo number_format($hist['bonus_percentage'], 2); ?>%</td>
+                                        <td><?php echo number_format($hist['avg_department_kpi'], 2); ?>%</td>
                                         <td><?php echo number_format($hist['base_salary'], 0, ',', ' '); ?> ₽</td>
                                         <td>
                                             <strong style="color: var(--success-color);">
@@ -210,7 +207,7 @@ $periodTypes = [
                                 </tbody>
                                 <tfoot>
                                     <tr style="background: var(--light-color); font-weight: bold;">
-                                        <td colspan="5">Всего за период:</td>
+                                        <td colspan="4">Всего за период:</td>
                                         <td>
                                             <?php 
                                             $totalBaseSalary = array_sum(array_column($rewardHistory, 'base_salary'));
